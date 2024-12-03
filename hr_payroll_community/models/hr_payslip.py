@@ -222,6 +222,94 @@ class HrPayslip(models.Model):
             payslip.write({'line_ids': lines, 'number': number})
         return True
 
+    # @api.model
+    # def get_worked_day_lines(self, contracts, date_from, date_to):
+    #     """
+    #     @param contracts: Browse record of contracts, date_from, date_to
+    #     @return: returns a list of dict containing the input that should be
+    #     applied for the given contract between date_from and date_to
+    #     """
+    #     res = []
+    #     # fill only if the contract as a working schedule linked
+    #     for contract in contracts.filtered(
+    #             lambda contract: contract.resource_calendar_id):
+    #         day_from = datetime.combine(fields.Date.from_string(date_from),
+    #                                     time.min)
+    #         day_to = datetime.combine(fields.Date.from_string(date_to),
+    #                                   time.max)
+    #         # compute leave days
+    #         leaves = {}
+    #         calendar = contract.resource_calendar_id
+    #         tz = timezone(calendar.tz)
+    #         day_leave_intervals = contract.employee_id.list_leaves(
+    #             day_from, day_to, calendar=contract.resource_calendar_id)
+    #         multi_leaves = []
+    #         for day, hours, leave in day_leave_intervals:
+    #             work_hours = calendar.get_work_hours_count(
+    #                 tz.localize(datetime.combine(day, time.min)),
+    #                 tz.localize(datetime.combine(day, time.max)),
+    #                 compute_leaves=False,
+    #             )
+    #             if len(leave) > 1:
+    #                 for each in leave:
+    #                     if each.holiday_id:
+    #                         multi_leaves.append(each.holiday_id)
+    #             else:
+    #                 holiday = leave.holiday_id
+    #                 current_leave_struct = leaves.setdefault(
+    #                     holiday.holiday_status_id, {
+    #                         'name': holiday.holiday_status_id.name or _(
+    #                             'Global Leaves'),
+    #                         'sequence': 5,
+    #                         'code': holiday.holiday_status_id.code or 'GLOBAL',
+    #                         'number_of_days': 0.0,
+    #                         'number_of_hours': 0.0,
+    #                         'contract_id': contract.id,
+    #                     })
+    #                 current_leave_struct['number_of_hours'] += hours
+    #                 if work_hours:
+    #                     current_leave_struct[
+    #                         'number_of_days'] += hours / work_hours
+    #         # compute worked days
+    #         work_data = contract.employee_id.get_work_days_data(
+    #             day_from, day_to, calendar=contract.resource_calendar_id)
+    #         attendances = {
+    #             'name': _("Normal Working Days paid at 100%"),
+    #             'sequence': 1,
+    #             'code': 'WORK100',
+    #             'number_of_days': work_data['days'],
+    #             'number_of_hours': work_data['hours'],
+    #             'contract_id': contract.id,
+    #         }
+    #         res.append(attendances)
+    #         uniq_leaves = [*set(multi_leaves)]
+    #         c_leaves = {}
+    #         for rec in uniq_leaves:
+    #             duration = rec.duration_display.replace("days", "").strip()
+    #             duration_in_hours = float(duration) * 24
+    #             c_leaves.setdefault(rec.holiday_status_id,
+    #                                 {'hours': duration_in_hours})
+    #         for item in c_leaves:
+    #             if not leaves or item not in leaves:
+    #                 data = {
+    #                     'name': item.name,
+    #                     'sequence': 20,
+    #                     'code': item.code or 'LEAVES',
+    #                     'number_of_hours': c_leaves[item]['hours'],
+    #                     'number_of_days': c_leaves[item][
+    #                                           'hours'] / work_hours,
+    #                     'contract_id': contract.id,
+    #                 }
+    #                 res.append(data)
+    #             for time_off in leaves:
+    #                 if item == time_off:
+    #                     leaves[item]['number_of_hours'] += c_leaves[item][
+    #                         'hours']
+    #                     leaves[item]['number_of_days'] \
+    #                         += c_leaves[item]['hours'] / work_hours
+    #         res.extend(leaves.values())
+    #     return res
+
     @api.model
     def get_worked_day_lines(self, contracts, date_from, date_to):
         """
@@ -230,19 +318,18 @@ class HrPayslip(models.Model):
         applied for the given contract between date_from and date_to
         """
         res = []
-        # fill only if the contract as a working schedule linked
-        for contract in contracts.filtered(
-                lambda contract: contract.resource_calendar_id):
-            day_from = datetime.combine(fields.Date.from_string(date_from),
-                                        time.min)
-            day_to = datetime.combine(fields.Date.from_string(date_to),
-                                      time.max)
-            # compute leave days
+        # fill only if the contract has a working schedule linked
+        for contract in contracts.filtered(lambda contract: contract.resource_calendar_id):
+            day_from = datetime.combine(fields.Date.from_string(date_from), time.min)
+            day_to = datetime.combine(fields.Date.from_string(date_to), time.max)
+
+            # Compute leave days
             leaves = {}
             calendar = contract.resource_calendar_id
             tz = timezone(calendar.tz)
             day_leave_intervals = contract.employee_id.list_leaves(
-                day_from, day_to, calendar=contract.resource_calendar_id)
+                day_from, day_to, calendar=contract.resource_calendar_id
+            )
             multi_leaves = []
             for day, hours, leave in day_leave_intervals:
                 work_hours = calendar.get_work_hours_count(
@@ -258,8 +345,7 @@ class HrPayslip(models.Model):
                     holiday = leave.holiday_id
                     current_leave_struct = leaves.setdefault(
                         holiday.holiday_status_id, {
-                            'name': holiday.holiday_status_id.name or _(
-                                'Global Leaves'),
+                            'name': holiday.holiday_status_id.name or _('Global Leaves'),
                             'sequence': 5,
                             'code': holiday.holiday_status_id.code or 'GLOBAL',
                             'number_of_days': 0.0,
@@ -268,12 +354,42 @@ class HrPayslip(models.Model):
                         })
                     current_leave_struct['number_of_hours'] += hours
                     if work_hours:
-                        current_leave_struct[
-                            'number_of_days'] += hours / work_hours
+                        current_leave_struct['number_of_days'] += hours / work_hours
+
+            # Compute actual worked days from Attendance
+            attendance_lines = self.env['hr.attendance'].search([
+                ('employee_id', '=', contract.employee_id.id),
+                ('check_in', '>=', day_from),
+                ('check_out', '<=', day_to)
+            ])
+            actual_work_days = 0
+            actual_work_hours = 0
+
+            for attendance in attendance_lines:
+                # Count actual worked days and hours
+                # Here assuming that check_in and check_out are within the expected time range.
+                check_in = max(attendance.check_in, day_from)
+                check_out = min(attendance.check_out, day_to)
+                worked_hours = (check_out - check_in).total_seconds() / 3600.0  # Convert to hours
+
+                actual_work_days += worked_hours / 8  # Assuming 8 hours in a workday
+                actual_work_hours += worked_hours
+
+            # Add to result the worked days and hours from Attendance
+            attendances = {
+                'name': _("Actual Working Days paid at 100%"),
+                'sequence': 2,
+                'code': 'ACTUAL_WORK_DAY',
+                'number_of_days': actual_work_days,
+                'number_of_hours': actual_work_hours,
+                'contract_id': contract.id,
+            }
+            res.append(attendances)
+
             # compute worked days
             work_data = contract.employee_id.get_work_days_data(
                 day_from, day_to, calendar=contract.resource_calendar_id)
-            attendances = {
+            work100 = {
                 'name': _("Normal Working Days paid at 100%"),
                 'sequence': 1,
                 'code': 'WORK100',
@@ -281,14 +397,16 @@ class HrPayslip(models.Model):
                 'number_of_hours': work_data['hours'],
                 'contract_id': contract.id,
             }
-            res.append(attendances)
+            res.append(work100)
+
+            # Process leaves
             uniq_leaves = [*set(multi_leaves)]
             c_leaves = {}
             for rec in uniq_leaves:
                 duration = rec.duration_display.replace("days", "").strip()
                 duration_in_hours = float(duration) * 24
-                c_leaves.setdefault(rec.holiday_status_id,
-                                    {'hours': duration_in_hours})
+                c_leaves.setdefault(rec.holiday_status_id, {'hours': duration_in_hours})
+
             for item in c_leaves:
                 if not leaves or item not in leaves:
                     data = {
@@ -296,17 +414,15 @@ class HrPayslip(models.Model):
                         'sequence': 20,
                         'code': item.code or 'LEAVES',
                         'number_of_hours': c_leaves[item]['hours'],
-                        'number_of_days': c_leaves[item][
-                                              'hours'] / work_hours,
+                        'number_of_days': c_leaves[item]['hours'] / work_hours,
                         'contract_id': contract.id,
                     }
                     res.append(data)
                 for time_off in leaves:
                     if item == time_off:
-                        leaves[item]['number_of_hours'] += c_leaves[item][
-                            'hours']
-                        leaves[item]['number_of_days'] \
-                            += c_leaves[item]['hours'] / work_hours
+                        leaves[item]['number_of_hours'] += c_leaves[item]['hours']
+                        leaves[item]['number_of_days'] += c_leaves[item]['hours'] / work_hours
+
             res.extend(leaves.values())
         return res
 
