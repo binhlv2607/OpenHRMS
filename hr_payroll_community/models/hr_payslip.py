@@ -368,9 +368,10 @@ class HrPayslip(models.Model):
             for attendance in attendance_lines:
                 # Count actual worked days and hours
                 # Here assuming that check_in and check_out are within the expected time range.
-                check_in = max(attendance.check_in, day_from)
-                check_out = min(attendance.check_out, day_to)
-                worked_hours = (check_out - check_in).total_seconds() / 3600.0  # Convert to hours
+                # check_in = max(attendance.check_in, day_from)
+                # check_out = min(attendance.check_out, day_to)                
+                # worked_hours = (check_out - check_in).total_seconds() / 3600.0  # Convert to hours
+                worked_hours = attendance.worked_hours
 
                 actual_work_days += worked_hours / 8  # Assuming 8 hours in a workday
                 actual_work_hours += worked_hours
